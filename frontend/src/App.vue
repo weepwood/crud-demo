@@ -53,36 +53,71 @@ function showError(message: string) {
   <LoginPanel v-if="!authenticated" @authenticated="initialize" />
 
   <div v-else class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <span class="mini-brand">PG</span>
-        <div>
-          <strong>CRUD Console</strong>
-          <small>Metadata-driven database manager</small>
-        </div>
-      </div>
-      <div class="connection-state">
-        <span class="status-dot" /> PostgreSQL connected
-        <button class="secondary compact" @click="logout">退出</button>
-      </div>
-    </header>
+    <TableSidebar
+      :schemas="schemas"
+      :selected="selectedTable"
+      @select="selectedTable = $event"
+      @error="showError"
+      @logout="logout"
+    />
 
-    <div class="workspace">
-      <TableSidebar
-        :schemas="schemas"
-        :selected="selectedTable"
-        @select="selectedTable = $event"
-        @error="showError"
-      />
-      <main class="content">
-        <DataGrid v-if="selectedTable" :table="selectedTable" @error="showError" />
-        <div v-else class="welcome-state">
-          <div class="welcome-icon">▦</div>
-          <h1>{{ loading ? '正在读取数据库…' : '选择一个数据表' }}</h1>
-          <p>左侧会列出当前数据库账号有 SELECT 权限的普通表和分区表。</p>
+    <main class="content-shell">
+      <header class="page-intro">
+        <div class="intro-identity">
+          <div class="intro-avatar">DB</div>
+          <div>
+            <p class="eyebrow">POSTGRESQL WORKSPACE</p>
+            <h1>欢迎使用数据库控制台</h1>
+            <p>浏览数据库对象、检查字段结构，并安全地管理表中数据。</p>
+          </div>
         </div>
-      </main>
-    </div>
+        <div class="connection-chip">
+          <span class="status-dot" />
+          PostgreSQL 已连接
+        </div>
+      </header>
+
+      <DataGrid v-if="selectedTable" :table="selectedTable" @error="showError" />
+
+      <section v-else class="overview-page">
+        <div class="overview-grid">
+          <article class="overview-card overview-card-primary">
+            <div>
+              <p class="eyebrow">DATA CATALOG</p>
+              <h2>{{ loading ? '正在读取数据库…' : '选择一个数据表' }}</h2>
+              <p>左侧目录会列出当前数据库账号拥有 SELECT 权限的普通表和分区表。</p>
+            </div>
+            <div class="overview-illustration" aria-hidden="true">
+              <span class="illustration-card illustration-card-main">TABLE</span>
+              <span class="illustration-line illustration-line-one" />
+              <span class="illustration-line illustration-line-two" />
+              <span class="illustration-node">+</span>
+            </div>
+          </article>
+
+          <article class="overview-card">
+            <div class="overview-card-icon">⌕</div>
+            <h2>浏览与搜索</h2>
+            <p>对当前表执行分页浏览、全字段搜索和字段排序。</p>
+          </article>
+
+          <article class="overview-card">
+            <div class="overview-card-icon">✦</div>
+            <h2>动态 CRUD</h2>
+            <p>根据 PostgreSQL 元数据生成新增、编辑和删除界面。</p>
+          </article>
+
+          <article class="overview-card overview-card-wide">
+            <div class="overview-card-icon">◇</div>
+            <div>
+              <h2>权限与安全边界</h2>
+              <p>写入能力由数据库账号权限、Schema 白名单和全局只读模式共同决定。</p>
+            </div>
+            <span class="overview-badge">Metadata driven</span>
+          </article>
+        </div>
+      </section>
+    </main>
 
     <Transition name="toast">
       <div v-if="error" class="toast-error">{{ error }}</div>

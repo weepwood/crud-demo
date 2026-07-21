@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [table: TableInfo]
   error: [message: string]
+  logout: []
 }>()
 
 const activeSchema = ref(props.schemas[0]?.name ?? '')
@@ -59,9 +60,38 @@ function formatRows(value: number): string {
 
 <template>
   <aside class="sidebar">
-    <div class="sidebar-heading">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">PG</div>
+      <div>
+        <strong>CRUD Console</strong>
+        <small>Database workspace</small>
+      </div>
+      <span class="brand-chevron">⌃</span>
+    </div>
+
+    <label class="sidebar-global-search">
+      <span class="search-symbol">⌕</span>
+      <input v-model="filter" aria-label="搜索数据表" placeholder="搜索数据表" />
+      <kbd>/</kbd>
+    </label>
+
+    <nav class="primary-nav" aria-label="主要导航">
+      <button type="button" class="nav-item">
+        <span class="nav-icon">⌂</span>
+        <span>概览</span>
+      </button>
+      <button type="button" class="nav-item active">
+        <span class="nav-icon">▣</span>
+        <span>数据目录</span>
+        <span class="nav-count">{{ tables.length }}</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-divider" />
+
+    <div class="sidebar-section-heading">
       <span>数据库对象</span>
-      <button class="icon-button" title="刷新表列表" @click="loadTables">↻</button>
+      <button class="icon-button compact-icon" title="刷新表列表" @click="loadTables">↻</button>
     </div>
 
     <label class="select-label">
@@ -72,8 +102,6 @@ function formatRows(value: number): string {
         </option>
       </select>
     </label>
-
-    <input v-model="filter" class="sidebar-search" placeholder="筛选数据表…" />
 
     <div class="table-list" :class="{ loading }">
       <button
@@ -88,7 +116,18 @@ function formatRows(value: number): string {
         <span v-if="!table.hasPrimaryKey" class="warning-dot" title="无主键，将使用 ctid 定位行">!</span>
         <span class="row-count">{{ formatRows(table.estimatedRows) }}</span>
       </button>
-      <p v-if="!loading && visibleTables.length === 0" class="empty-note">没有可访问的数据表</p>
+      <p v-if="!loading && visibleTables.length === 0" class="empty-note">没有匹配的数据表</p>
     </div>
+
+    <footer class="sidebar-footer">
+      <div class="sidebar-connection">
+        <span class="status-dot" />
+        <div>
+          <strong>连接正常</strong>
+          <small>{{ activeSchema || 'PostgreSQL' }}</small>
+        </div>
+      </div>
+      <button class="logout-button" type="button" @click="emit('logout')">退出</button>
+    </footer>
   </aside>
 </template>
