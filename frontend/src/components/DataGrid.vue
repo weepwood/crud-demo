@@ -25,6 +25,13 @@ let searchTimer: number | undefined
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / size.value)))
 const rangeStart = computed(() => total.value === 0 ? 0 : page.value * size.value + 1)
 const rangeEnd = computed(() => Math.min(total.value, (page.value + 1) * size.value))
+const permissionSummary = computed(() => {
+  const permissions: string[] = []
+  if (metadata.value?.canInsert) permissions.push('新增')
+  if (metadata.value?.canUpdate) permissions.push('编辑')
+  if (metadata.value?.canDelete) permissions.push('删除')
+  return permissions.length ? permissions.join(' / ') : '只读'
+})
 
 watch(
   () => [props.table.schema, props.table.name],
@@ -152,6 +159,10 @@ function displayValue(value: unknown): string {
   return String(value)
 }
 
+function formatEstimate(value: number): string {
+  return new Intl.NumberFormat('zh-CN', { notation: value >= 10_000 ? 'compact' : 'standard' }).format(value)
+}
+
 function emitError(cause: unknown) {
   emit('error', cause instanceof Error ? cause.message : '数据库操作失败')
 }
@@ -160,85 +171,122 @@ function emitError(cause: unknown) {
 <template>
   <section class="data-view">
     <header class="data-header">
-      <div>
-        <p class="eyebrow">{{ table.schema }}</p>
-        <h1>{{ table.name }}</h1>
+      <div class="table-title-block">
+        <div class="table-title-icon">▦</div>
+        <div>
+          <p class="eyebrow">{{ table.schema }} / DATA TABLE</p>
+          <h2>{{ table.name }}</h2>
+          <p>查看记录、检查字段结构，并执行当前账号允许的数据操作。</p>
+        </div>
       </div>
       <div class="header-actions">
         <button class="secondary" @click="showMetadata = true">字段结构</button>
-        <button class="secondary" @click="loadRows">刷新</button>
-        <button class="primary" :disabled="!metadata?.canInsert" @click="openCreate">新增记录</button>
+        <button class="secondary icon-action" title="刷新数据" @click="loadRows">↻</button>
+        <button class="primary" :disabled="!metadata?.canInsert" @click="openCreate">＋ 新增记录</button>
       </div>
     </header>
 
+    <div class="metric-grid">
+      <article class="metric-card">
+        <span>估算行数</span>
+        <strong>{{ formatEstimate(table.estimatedRows) }}</strong>
+        <small>PostgreSQL statistics</small>
+      </article>
+      <article class="metric-card">
+        <span>字段数量</span>
+        <strong>{{ metadata?.columns.length ?? '—' }}</strong>
+        <small>当前表结构</small>
+      </article>
+      <article class="metric-card">
+        <span>主键</span>
+        <strong class="metric-text">{{ metadata?.primaryKeys.join(', ') || '无主键' }}</strong>
+        <small>{{ metadata?.primaryKeys.length ? '稳定行标识' : '使用 ctid 定位' }}</small>
+      </article>
+      <article class="metric-card">
+        <span>写入权限</span>
+        <strong class="metric-text">{{ permissionSummary }}</strong>
+        <small>由数据库权限决定</small>
+      </article>
+    </div>
+
     <div v-if="metadata && metadata.primaryKeys.length === 0" class="warning-banner">
-      该表没有主键，更新和删除会使用当前行的 ctid。并发修改或 VACUUM FULL 后，旧 ctid 可能失效。
-    </div>
-
-    <div class="toolbar">
-      <div class="search-box">
-        <span>⌕</span>
-        <input v-model="query" placeholder="搜索所有字段…" @input="scheduleSearch" />
-      </div>
-      <label>
-        每页
-        <select v-model.number="size">
-          <option :value="25">25</option>
-          <option :value="50">50</option>
-          <option :value="100">100</option>
-          <option :value="200">200</option>
-        </select>
-      </label>
-    </div>
-
-    <div class="grid-shell" :class="{ loading }">
-      <table v-if="metadata">
-        <thead>
-          <tr>
-            <th class="action-column">操作</th>
-            <th
-              v-for="column in metadata.columns"
-              :key="column.name"
-              class="sortable"
-              @click="changeSort(column.name)"
-            >
-              <span>{{ column.name }}</span>
-              <small>{{ column.formattedType }}</small>
-              <b v-if="sort === column.name">{{ direction === 'asc' ? '↑' : '↓' }}</b>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in rows" :key="String(row.__rowId)">
-            <td class="row-actions">
-              <button :disabled="!metadata.canUpdate" @click="openEdit(row)">编辑</button>
-              <button class="danger-link" :disabled="!metadata.canDelete" @click="removeRow(row)">删除</button>
-            </td>
-            <td
-              v-for="column in metadata.columns"
-              :key="column.name"
-              :class="{ null: row[column.name] === null || row[column.name] === undefined }"
-              :title="displayValue(row[column.name])"
-            >
-              {{ displayValue(row[column.name]) }}
-            </td>
-          </tr>
-          <tr v-if="!loading && rows.length === 0">
-            <td class="empty-cell" :colspan="metadata.columns.length + 1">没有匹配的数据</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="loading" class="loading-overlay">正在读取 PostgreSQL…</div>
-    </div>
-
-    <footer class="pagination">
-      <span>显示 {{ rangeStart }}–{{ rangeEnd }}，共 {{ total }} 条</span>
+      <span class="warning-icon">!</span>
       <div>
-        <button class="secondary compact" :disabled="page === 0" @click="page--; loadRows()">上一页</button>
-        <span>第 {{ page + 1 }} / {{ pageCount }} 页</span>
-        <button class="secondary compact" :disabled="page + 1 >= pageCount" @click="page++; loadRows()">下一页</button>
+        <strong>当前表没有主键</strong>
+        <p>更新和删除会使用当前行的 ctid。并发修改或 VACUUM FULL 后，旧 ctid 可能失效。</p>
       </div>
-    </footer>
+    </div>
+
+    <section class="data-card">
+      <div class="toolbar">
+        <div class="search-box">
+          <span>⌕</span>
+          <input v-model="query" placeholder="搜索当前表的所有字段…" @input="scheduleSearch" />
+          <kbd>⌘ K</kbd>
+        </div>
+        <label class="page-size-control">
+          <span>每页显示</span>
+          <select v-model.number="size">
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+            <option :value="200">200</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid-shell" :class="{ loading }">
+        <table v-if="metadata">
+          <thead>
+            <tr>
+              <th class="action-column">操作</th>
+              <th
+                v-for="column in metadata.columns"
+                :key="column.name"
+                class="sortable"
+                @click="changeSort(column.name)"
+              >
+                <span>{{ column.name }}</span>
+                <small>{{ column.formattedType }}</small>
+                <b v-if="sort === column.name">{{ direction === 'asc' ? '↑' : '↓' }}</b>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in rows" :key="String(row.__rowId)">
+              <td class="row-actions">
+                <button :disabled="!metadata.canUpdate" @click="openEdit(row)">编辑</button>
+                <button class="danger-link" :disabled="!metadata.canDelete" @click="removeRow(row)">删除</button>
+              </td>
+              <td
+                v-for="column in metadata.columns"
+                :key="column.name"
+                :class="{ null: row[column.name] === null || row[column.name] === undefined }"
+                :title="displayValue(row[column.name])"
+              >
+                {{ displayValue(row[column.name]) }}
+              </td>
+            </tr>
+            <tr v-if="!loading && rows.length === 0">
+              <td class="empty-cell" :colspan="metadata.columns.length + 1">没有匹配的数据</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="loading" class="loading-overlay">
+          <span class="loading-spinner" />
+          正在读取 PostgreSQL…
+        </div>
+      </div>
+
+      <footer class="pagination">
+        <span>显示 {{ rangeStart }}–{{ rangeEnd }}，共 {{ total }} 条</span>
+        <div>
+          <button class="secondary compact" :disabled="page === 0" @click="page--; loadRows()">上一页</button>
+          <span class="page-indicator">第 {{ page + 1 }} / {{ pageCount }} 页</span>
+          <button class="secondary compact" :disabled="page + 1 >= pageCount" @click="page++; loadRows()">下一页</button>
+        </div>
+      </footer>
+    </section>
 
     <RowEditor
       v-if="metadata && editorMode"
